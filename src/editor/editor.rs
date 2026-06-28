@@ -1,13 +1,14 @@
-use std::io::{Result, stdout};
+use std::io::Result;
 
-use crossterm::{
-    cursor::{MoveDown, MoveTo},
-    event::{Event, KeyCode, KeyEvent, KeyModifiers, read},
-    execute,
-    terminal::{Clear, disable_raw_mode, enable_raw_mode},
+use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers, read};
+
+use crate::editor::{
+    constants::{
+        EDITOR_NAME, EDITOR_VERSION, HEADER_DISPLAY_DIVIDER, KEYBOARD_CLOSE_SHORTCUT,
+        SIDE_EDITOR_CHAR, TERMINAL_INIT_POSITION, TERMINAL_NEW_LINE, TERMINATION_MESSAGE,
+    },
+    terminal::Terminal,
 };
-
-use crate::editor::constants::{KEYBOARD_CLOSE_SHORTCUT, SIDE_EDITOR_CHAR, TERMINATION_MESSAGE};
 
 #[derive(Debug)]
 pub struct Editor {
@@ -19,41 +20,22 @@ impl Editor {
         Editor { should_quit: false }
     }
 
-    // Handle screen clean
-    fn clear_screen() -> Result<()> {
-        let mut stdout = stdout();
-        execute!(stdout, Clear(crossterm::terminal::ClearType::All))
-    }
-
-    // Editor initialization
-    fn initialize() -> Result<()> {
-        enable_raw_mode()?;
-        Self::clear_screen();
-        Self::draw_rows()
-    }
-
-    // Termination actions
-    fn terminate() -> Result<()> {
-        disable_raw_mode()
-    }
-
     pub fn run(&mut self) {
-        Self::initialize().unwrap();
+        Terminal::initialize().unwrap();
         let result = self.repl();
-        Self::terminate().unwrap();
+        Terminal::terminate().unwrap();
         result.unwrap()
     }
 
     fn repl(&mut self) -> Result<()> {
         loop {
-            let mut event = read()?;
-
-            self.evaluate_event(&mut event);
             self.refresh_screen()?;
-
             if self.should_quit {
                 break;
             }
+            // Read and evaluate
+            let mut event = read()?;
+            self.evaluate_event(&mut event);
         }
         Ok(())
     }
@@ -61,10 +43,12 @@ impl Editor {
     fn refresh_screen(&self) -> Result<()> {
         // Quit if it should not be active
         if self.should_quit == true {
-            Self::clear_screen()?;
-            print!("{TERMINATION_MESSAGE}");
+            Terminal::clear_screen()?;
+            Terminal::print(&format!("{}", TERMINATION_MESSAGE))?;
+            Terminal::flush()?;
+        } else {
+            Self::draw_rows()?;
         }
-
         Ok(())
     }
 
@@ -84,19 +68,48 @@ impl Editor {
     }
 
     fn draw_rows() -> Result<()> {
-        let (rows, _cols) = crossterm::terminal::size()?;
+        // Stdout buffer
+        let (columns, rows) = Terminal::size()?;
+        let header_row: u16 = rows / HEADER_DISPLAY_DIVIDER;
+        Terminal::hide_cursor()?;
+        Terminal::move_cursor_to(TERMINAL_INIT_POSITION)?;
 
-        // Move home
-        execute!(stdout(), MoveTo(0, 0))?;
+        // Fill buffer with Chars
+        for i in 0..rows {
+            Terminal::clear_line()?;
+            if i == header_row {
+                Self::draw_header_line(columns)?
+            } else {
+                Self::draw_empty_line()?
+            }
 
-        // Fill with Chars
-        for _ in 0..rows {
-            print!("{SIDE_EDITOR_CHAR}\r");
-            execute!(stdout(), MoveDown(1))?;
+            // Print eol if not matched height
+            if i + 1 < rows {
+                Terminal::print(TERMINAL_NEW_LINE)?;
+            }
         }
 
         // Move home again
-        execute!(stdout(), MoveTo(1, 0))?;
+        Terminal::move_cursor_to(TERMINAL_INIT_POSITION)?;
+        Terminal::show_cursor()?;
+
+        // Flush buffer
+        Terminal::flush()?;
+
+        Ok(())
+    }
+
+    fn draw_header_line(columns: u16) -> Result<()> {
+        let header_text = format!("{}-{}", EDITOR_NAME, EDITOR_VERSION);
+        let padding = columns.saturating_sub(header_text.len() as u16) / 2;
+        let spaces = " ".repeat(padding.saturating_sub(1) as usize);
+
+        Terminal::print(&format!("{}{}{}", SIDE_EDITOR_CHAR, spaces, header_text))?;
+        Ok(())
+    }
+
+    fn draw_empty_line() -> Result<()> {
+        Terminal::print(&format!("{}", SIDE_EDITOR_CHAR))?;
         Ok(())
     }
 }
