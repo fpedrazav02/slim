@@ -1,10 +1,8 @@
-mod constants;
+use crate::editor::Editor;
+
 mod editor;
 
-use editor::Editor;
-
 fn main() {
-
-    let editor = Editor::new();
+    let mut editor = Editor::new();
     editor.run();
 }
