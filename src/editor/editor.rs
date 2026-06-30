@@ -13,11 +13,15 @@ use crate::editor::{
 #[derive(Debug)]
 pub struct Editor {
     should_quit: bool,
+    current_position: (u16, u16),
 }
 
 impl Editor {
     pub fn new() -> Editor {
-        Editor { should_quit: false }
+        Editor {
+            should_quit: false,
+            current_position: TERMINAL_INIT_POSITION,
+        }
     }
 
     pub fn run(&mut self) {
@@ -47,12 +51,12 @@ impl Editor {
             Terminal::print(&format!("{}", TERMINATION_MESSAGE))?;
             Terminal::flush()?;
         } else {
-            Self::draw_rows()?;
+            Self::draw_rows(self)?;
         }
         Ok(())
     }
 
-    fn evaluate_event(&mut self, event: &Event) {
+    fn evaluate_event(&mut self, event: &Event) -> Result<()> {
         if let Event::Key(KeyEvent {
             code, modifiers, ..
         }) = event
@@ -62,12 +66,21 @@ impl Editor {
                 KeyCode::Char(KEYBOARD_CLOSE_SHORTCUT) if *modifiers == KeyModifiers::CONTROL => {
                     self.should_quit = true;
                 }
+                KeyCode::Up
+                | KeyCode::Down
+                | KeyCode::Right
+                | KeyCode::Left
+                | KeyCode::PageUp
+                | KeyCode::Home
+                | KeyCode::End
+                | KeyCode::PageDown => self.move_cursor(*code)?,
                 _ => (),
             }
         }
+        Ok(())
     }
 
-    fn draw_rows() -> Result<()> {
+    fn draw_rows(&self) -> Result<()> {
         // Stdout buffer
         let (columns, rows) = Terminal::size()?;
         let header_row: u16 = rows / HEADER_DISPLAY_DIVIDER;
@@ -90,7 +103,7 @@ impl Editor {
         }
 
         // Move home again
-        Terminal::move_cursor_to(TERMINAL_INIT_POSITION)?;
+        Terminal::move_cursor_to(self.current_position)?;
         Terminal::show_cursor()?;
 
         // Flush buffer
@@ -110,6 +123,27 @@ impl Editor {
 
     fn draw_empty_line() -> Result<()> {
         Terminal::print(&format!("{}", SIDE_EDITOR_CHAR))?;
+        Ok(())
+    }
+
+    fn move_cursor(&mut self, key_code: KeyCode) -> Result<()> {
+        let (columns, rows) = Terminal::size()?;
+        let (x, y) = self.current_position;
+
+        self.current_position = match key_code {
+            KeyCode::Right => {
+                let max_x = columns.saturating_sub(1);
+                (x.saturating_add(1).min(max_x), y)
+            }
+            KeyCode::Left => (x.saturating_sub(1), y),
+            KeyCode::Down => {
+                let max_y = rows.saturating_sub(1);
+                (x, y.saturating_add(1).min(max_y))
+            }
+            KeyCode::Up => (x, y.saturating_sub(1)),
+            _ => self.current_position,
+        };
+
         Ok(())
     }
 }

@@ -1,8 +1,10 @@
 use crossterm::cursor::{Hide, MoveTo, Show};
+use crossterm::queue;
 use crossterm::style::Print;
 use crossterm::terminal::{Clear, ClearType, disable_raw_mode, enable_raw_mode, size};
-use crossterm::queue;
 use std::io::{Write, stdout};
+
+use crate::editor::constants::TERMINAL_INIT_POSITION;
 
 pub struct Terminal {}
 
@@ -18,7 +20,8 @@ impl Terminal {
         Ok(())
     }
     pub fn clear_screen() -> Result<(), std::io::Error> {
-        queue!(stdout(), Clear(ClearType::All), MoveTo(0, 0))?;
+        queue!(stdout(), Clear(ClearType::All),)?;
+        Self::move_cursor_to(TERMINAL_INIT_POSITION)?;
         Ok(())
     }
     pub fn clear_line() -> Result<(), std::io::Error> {
